@@ -32,20 +32,19 @@
 
     - name: "Pre-pull pause container image"
       shell: |
-        /usr/local/bin/crictl --runtime-endpoint unix:///run/containerd/containerd.sock \
-        pull k8s.gcr.io/pause:3.2
+        /usr/local/bin/crictl --runtime-endpoint unix:///run/containerd/containerd.sock pull k8s.gcr.io/pause:3.2
 
     - name: "test (1) - component versions"
       shell: |
-        crictl --version
-        containerd --version
+        /usr/local/bin/crictl --version
+        /usr/local/bin/containerd --version
       register: t1
 
     - debug: msg={{ t1.stdout }}
     
     - name: "test (2) - containerd snapshotter"
       shell: |
-        crictl info -o json | jq .config.containerd.snapshotter
+        /usr/local/bin/crictl info -o json | jq .config.containerd.snapshotter
       register: t2  
 
     - debug: msg={{ t2.stdout }}
@@ -57,12 +56,18 @@
 
     - debug: msg={{ t3.stdout }}
 
-    - name: "test (4) - simple test, dockers hello-world"
+    - name: "test (4.1) - simple test, pull docker hello-world"
       shell: |
-        /usr/local/bin/crictl pull docker.io/library/hello-world:latest
-        ctr --namespace=k8s.io run --rm -t docker.io/library/hello-world:latest $$
+        /usr/local/bin/crictl pull docker.io/library/hello-world:latest 
       register: t4
 
     - debug: msg={{ t4.stdout }}
+
+
+    - name: "test (4.2) - simple test, run hello-world"
+      command: /usr/local/bin/ctr --namespace=k8s.io run --rm -t docker.io/library/hello-world:latest foo
+      register: t5
+
+    - debug: var=t5
 
     
