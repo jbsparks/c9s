@@ -1,0 +1,68 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - include_vars: vars/vars.yaml # Contains tasks variables for installer
+    - include_tasks: tasks/bootstrap_ubuntu.yaml # Contains tasks bootstrap components for ubuntu systems
+      when: ansible_distribution == "Ubuntu"
+    - include_tasks: tasks/bootstrap_centos.yaml # Contains tasks bootstrap components for centos systems
+      when: ansible_distribution == "CentOS"
+    - include_tasks: tasks/binaries.yaml # Contains tasks for pulling containerd components
+
+    - name: "Create a directory for containerd config"
+      file: path=/etc/containerd state=directory
+
+    - name: "Start Containerd"
+      systemd: name=containerd daemon_reload=yes state=started enabled=yes
+
+    - name: "Load br_netfilter kernel module"
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: "Set bridge-nf-call-iptables"
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+
+    - name: "Set ip_forward"
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: 1
+
+    - name: "Pre-pull pause container image"
+      shell: |
+        /usr/local/bin/crictl --runtime-endpoint unix:///run/containerd/containerd.sock \
+        pull k8s.gcr.io/pause:3.2
+
+    - name: "test (1) - component versions"
+      shell: |
+        crictl --version
+        containerd --version
+      register: t1
+
+    - debug: msg={{ t1.stdout }}
+    
+    - name: "test (2) - containerd snapshotter"
+      shell: |
+        crictl info -o json | jq .config.containerd.snapshotter
+      register: t2  
+
+    - debug: msg={{ t2.stdout }}
+
+    - name: "test (3) - what images do we have loaded... should see pause:3.2"
+      shell: |
+        /usr/local/bin/crictl image ls
+      register: t3
+
+    - debug: msg={{ t3.stdout }}
+
+    - name: "test (4) - simple test, dockers hello-world"
+      shell: |
+        /usr/local/bin/crictl pull docker.io/library/hello-world:latest
+        ctr --namespace=k8s.io run --rm -t docker.io/library/hello-world:latest $$
+      register: t4
+
+    - debug: msg={{ t4.stdout }}
+
+    
